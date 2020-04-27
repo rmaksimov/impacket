@@ -23,6 +23,7 @@ from struct import unpack, calcsize, pack
 from functools import partial
 import collections
 import logging
+from six import PY2
 
 from impacket.dcerpc.v5.ndr import NDRSTRUCT, NDRUniConformantArray, NDRPOINTER, NDRUniConformantVaryingArray, NDRUNION, \
     NDRENUM
@@ -153,6 +154,7 @@ class ENCODED_STRING(Structure):
                 self.fromString(data)
         else:
             self.structure = self.tascii
+            self.isUnicode = False
             self.data = None
 
     def __getitem__(self, key):
@@ -2661,7 +2663,13 @@ class IWbemClassObject(IRemUnknown):
                             ndTable |= 3 << (2*i)
                     else:
                         strIn = ENCODED_STRING()
-                        if type(inArg) is str:
+
+                        if PY2:
+                            string_type = unicode
+                        else:
+                            string_type = str
+
+                        if type(inArg) is string_type:
                             # The Encoded-String-Flag is set to 0x01 if the sequence of characters that follows
                             # consists of UTF-16 characters (as specified in [UNICODE]) followed by a UTF-16 null
                             # terminator.

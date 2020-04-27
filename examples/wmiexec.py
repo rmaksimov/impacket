@@ -211,7 +211,10 @@ class RemoteShell(cmd.Cmd):
                 self.__pwd = ntpath.normpath(ntpath.join(self.__pwd, s))
             self.execute_remote('cd ')
             self.__pwd = self.__outputBuffer.strip('\r\n')
-            self.prompt = (self.__pwd + '>')
+            if PY2:
+                self.prompt = (self.__pwd + '>').encode(sys.stdout.encoding)
+            else:
+                self.prompt = self.__pwd + '>'
             self.__outputBuffer = ''
 
     def default(self, line):
@@ -228,7 +231,10 @@ class RemoteShell(cmd.Cmd):
                 self.__pwd = line
                 self.execute_remote('cd ')
                 self.__pwd = self.__outputBuffer.strip('\r\n')
-                self.prompt = (self.__pwd + '>')
+                if PY2:
+                    self.prompt = (self.__pwd + '>').encode(sys.stdout.encoding)
+                else:
+                    self.prompt = self.__pwd + '>'
                 self.__outputBuffer = ''
         else:
             if line != '':
@@ -250,6 +256,10 @@ class RemoteShell(cmd.Cmd):
 
         while True:
             try:
+                # Let the server write to the file
+                # Prevent STATUS_OBJECT_NAME_NOT_FOUND error from constantly displaying
+                time.sleep(0.1)
+
                 self.__transferClient.getFile(self.__share, self.__output, output_callback)
                 break
             except Exception as e:
@@ -262,6 +272,16 @@ class RemoteShell(cmd.Cmd):
                     logging.debug('Connection broken, trying to recreate it')
                     self.__transferClient.reconnect()
                     return self.get_output()
+                elif str(e).find('STATUS_OBJECT_NAME_NOT_FOUND') >= 0:
+                    if logging.getLogger().level == logging.DEBUG:
+                        logging.error(str(e))
+                    # This prevents shell from getting stuck
+                    # if the cd command is issued against a directory with encoding problem
+                    return
+                else:
+                    if logging.getLogger().level == logging.DEBUG:
+                        logging.error(str(e))
+
         self.__transferClient.deleteFile(self.__share, self.__output)
 
     def execute_remote(self, data):
@@ -272,6 +292,7 @@ class RemoteShell(cmd.Cmd):
             self.__win32Process.Create(command.decode(sys.stdin.encoding), self.__pwd, None)
         else:
             self.__win32Process.Create(command, self.__pwd, None)
+
         self.get_output()
 
     def send_data(self, data):
